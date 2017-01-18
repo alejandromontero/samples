@@ -1,0 +1,18 @@
+---PacketManager---
+-------------------
+Reading Config file config/example.dat...
+localSearch was enabled in BRKGA. Disabling it.
+Reading Input Data file data/instance14...
+<DATParser.DATAttributes object at 0x7f79b36c5c90>
+Creating Problem...
+Solving Problem...
+Elap. Time (s)   Obj. Value   Iter./Gener.
+    0.00000215   9.223372e+18              0
+   13.84912419          616              1
+   96.01473308          615              8
+  308.02077413          615             25
+
+BRKGA Individual Decoder Performance:
+  Num. Individuals Decoded 1767
+  Total Decoding Time      307.827750683 s
+  Avg. Time / Individual   174.209253358 ms

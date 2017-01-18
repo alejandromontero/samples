@@ -1,0 +1,11 @@
+
+nTrucks=1;
+nPackages=1;
+xTruck=5;
+yTruck=5;
+wTruck=5;
+xDimp=[1];
+yDimp=[1];
+wp=[3];
+incomp=[
+ [0]];

@@ -1,0 +1,16 @@
+/*********************************************
+ * OPL 12.6.0.0 Data
+ * Author: root
+ * Creation Date: 09/06/2016 at 09:35:10
+ *********************************************/
+nTrucks=1;
+nPackages=1;
+xTruck=3;
+yTruck=2;
+wTruck=5;
+xDimp=[3];
+yDimp=[2];
+wp=[1];
+incomp=[
+ [0]];
+ 
