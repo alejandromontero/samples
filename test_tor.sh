@@ -70,7 +70,7 @@ $(pwd)/tor-browser_en-US/Browser/start-tor-browser &
 
 sleep 10
 
-python $(pwd)/script.py 10
+python $(pwd)/script.py $n_iter
 
 uninstall_dependencies
 
