@@ -20,7 +20,7 @@ install_dependencies() {
         	wget https://github.com/TheTorProject/gettorbrowser/releases/download/v6.5.2/tor-browser-linux64-6.5.2_en-US.tar.xz
         	echo -e"$BLUE Untaring TOR $NC \n"
 	       	tar -xvf tor-browser-linux64-6.5.2_en-US.tar.xz
-		PACKAGES+=" tor"
+		    PACKAGES+=" tor"
 	fi
 
 	if ! dpkg --get-selections | grep "^python[[:space:]]*install$" &> /dev/null; then
