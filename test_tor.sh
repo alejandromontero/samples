@@ -72,7 +72,7 @@ sleep 10
 
 python $(pwd)/script.py 10
 
-#uninstall_dependencies
+uninstall_dependencies
 
 
 
