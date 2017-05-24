@@ -1,0 +1,3 @@
+https://check.torproject.org/
+https://google.com
+https://raco.fib.upc.edu
