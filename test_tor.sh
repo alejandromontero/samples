@@ -15,12 +15,11 @@ install_dependencies() {
 	echo -e "$BLUE checking dependencies... $NC \n"
 
 	if [ ! -d $(pwd)/tor-browser_en-US ]; then
-
-        	echo -e "$RED TOR not found in ${NC} $(pwd) ${RED} Downloading... $NC \n"
-        	wget https://github.com/TheTorProject/gettorbrowser/releases/download/v6.5.2/tor-browser-linux64-6.5.2_en-US.tar.xz
-        	echo -e"$BLUE Untaring TOR $NC \n"
-	       	tar -xvf tor-browser-linux64-6.5.2_en-US.tar.xz
-		    PACKAGES+=" tor"
+        echo -e "$RED TOR not found in ${NC} $(pwd) ${RED} Downloading... $NC \n"
+        wget https://github.com/TheTorProject/gettorbrowser/releases/download/v6.5.2/tor-browser-linux64-6.5.2_en-US.tar.xz
+        echo -e"$BLUE Untaring TOR $NC \n"
+	    tar -xvf tor-browser-linux64-6.5.2_en-US.tar.xz
+		PACKAGES+=" tor"
 	fi
 
 	if ! dpkg --get-selections | grep "^python[[:space:]]*install$" &> /dev/null; then
@@ -31,9 +30,9 @@ install_dependencies() {
 	for package in $PYTHON_PACKAGES; do
 
 		python -c "import $package" &> /dev/null ||  if [ $(echo $?) ]; then
-        		echo -e "$BLUE Installing Python module $pacakge $NC \n"
-        		pip install --user $package
-        		PYTHON_PACKAGES_INSTALLED+=" $package"
+            echo -e "$BLUE Installing Python module $pacakge $NC \n"
+        	pip install --user $package
+        	PYTHON_PACKAGES_INSTALLED+=" $package"
 		fi
 	done
 }
@@ -42,7 +41,7 @@ uninstall_dependencies() {
 	echo -e "$RED uninstalling previously installed packages for this test: $PYTHON_PACKAGES $PACKAGES  $NC \n"
 
 	for package in $PYTHON_PACKAGES_INSTALLED; do
-        	pip uninstall -y $package
+        pip uninstall -y $package
 	done
 
 	for package in $PACKAGES; do
@@ -51,6 +50,8 @@ uninstall_dependencies() {
 
 	echo -e "$BLUE uninstall completed $NC \n"
 }
+
+#MAIN SECTION
 
 echo -e "${GREEN} ----------------Starting TOR evaluation script---------------- $NC \n"
 
@@ -68,11 +69,13 @@ echo -e "$BLUE starting TOR browser for the fist time, please select Connect opt
 $(pwd)/tor-browser_en-US/Browser/start-tor-browser
 $(pwd)/tor-browser_en-US/Browser/start-tor-browser &
 
+echo -e "$YELLOW WARNING: Sleeping for 10 seconds to wait for TOR to initiate... $NC \n"
 sleep 10
 
+echo -e "$GREEN Starting the experiments... now $NC \n"
 python $(pwd)/script.py $n_iter
 
-uninstall_dependencies
+#uninstall_dependencies
 
 
 
