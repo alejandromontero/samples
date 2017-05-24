@@ -41,7 +41,7 @@ install_dependencies() {
 uninstall_dependencies() {
 	echo -e "$RED uninstalling previously installed packages for this test: $PYTHON_PACKAGES $PACKAGES  $NC \n"
 
-	for package in $PYTHON_PACKAGES; do
+	for package in $PYTHON_PACKAGES_INSTALLED; do
         	pip uninstall -y $package
 	done
 
@@ -68,7 +68,9 @@ echo -e "$BLUE starting TOR browser for the fist time, please select Connect opt
 $(pwd)/tor-browser_en-US/Browser/start-tor-browser
 $(pwd)/tor-browser_en-US/Browser/start-tor-browser &
 
-#python $(pwd)/tor_test.py 10
+sleep 10
+
+python $(pwd)/script.py 10
 
 #uninstall_dependencies
 
