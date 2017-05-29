@@ -26,27 +26,33 @@ def export_to_csv(queries,__location__):
 
     csv_file = open(__location__ + '/results_of_experiment.csv','wb')
 
-    header = ["web-page", "circuit_average_creation_times", "query_average_times", "total_query_average_times"]
+    header = ["web-page", "circuit_average_creation_times", "query_average_times", "total_query_average_times","average_circuit_fails","average_query_fails"]
     writer = csv.DictWriter(csv_file,delimiter=',',fieldnames=header)
     writer.writeheader()
-
+    pprint.pprint(queries)
     for key,value in queries.iteritems():
         row={}
         average_circuit_times=0
+        average_circuit_fails=0
         average_query_times=0
-        average_total_times=0
+        average_query_fails=0
+        total_query_average_times=0
         for j in xrange(0, len(value["query_times"])):
             average_circuit_times += value["circuit_creation_times"][j]
+            average_circuit_fails += value["circuit_fails"][j]
             average_query_times += value["query_times"][j]
-            average_total_times += value["query_total_times"][j]
+            average_query_fails += value["query_fails"][j]
+            total_query_average_times += value["query_total_times"][j]
 
         row["web-page"]=key
         row["circuit_average_creation_times"] = average_circuit_times/len(value["query_times"])
+        row["average_circuit_fails"] = average_circuit_fails/len(value["query_times"])
         row["query_average_times"] = average_query_times/len(value["query_times"])
-        row["query_average_times"] = average_query_times/len(value["query_times"])
+        row["average_query_fails"] = average_query_fails/len(value["query_times"])
+        row["total_query_average_times"] = total_query_average_times/len(value["query_times"])
         writer.writerow(row)
 
-def query(url,queries,web):
+def query(url):
     """
     Uses pycurl to fetch a site using the proxy on the SOCKS_PORT.
     """
@@ -64,34 +70,28 @@ def query(url,queries,web):
     try:
         query.perform()
     except pycurl.error as exc:
-        sys.stderr.write ("Unable to perform query \n")
+        sys.stderr.write ("Unable to perform query: ")
+        print (exc)
         return "FAIL"
 
     return "SUCCESS"
 
-def create_circuit(controller):
-    #attach stream to circuit
-    def attach_stream(stream):
-        if stream.status == 'NEW':
-            controller.attach_stream(stream.id, circuit)
-
-    try:
-        circuit = controller.new_circuit(await_build = True)
-        controller.add_event_listener(attach_stream, stem.control.EventType.STREAM)
-        return circuit,attach_stream
-    except Exception as exc:
-        sys.stderr.write("Couldn't create a new circuit \n")
-        return None, None
 
 def make_experiments(controller,iterations):
 
     #Close all current TOR circuits (if any)
+    print "stopping circuits"
     for circuit in controller.get_circuits():
+        print ("Stopping: ", circuit.id)
         controller.close_circuit(circuit.id)
+
+    print "stopping streams"
+    for stream in controller.get_streams():
+        print ("Stopping: ", stream.id)
+        controller.close_stream(stream.id)
 
     # Configure tor client
     controller.set_conf("__DisablePredictedCircuits", "1")
-    controller.set_conf("__LeaveStreamsUnattached", "1")
     controller.set_conf("MaxClientCircuitsPending", "1024")
 
     #Open file with URL to analyze
@@ -109,43 +109,69 @@ def make_experiments(controller,iterations):
 
         queries[line]={}
         queries[line]["circuit_creation_times"]=[]
+        queries[line]["circuit_fails"]=[]
         queries[line]["query_times"]=[]
+        queries[line]["query_fails"]=[]
         queries[line]["query_total_times"]=[]
 
         for i in xrange (0, int(iterations)):
-            print ("Iteration ", i, "of web-page ", line)
-            #create a new circuit
-
+            print ("Iteration ", i+1, "of web-page ", line)
             query_sucess=""
+            circuit_fails=0
+            query_fails=0
             init_query=time.time()
             while query_sucess != "SUCCESS":
-                circuit=""
-                attach_stream=""
+                #create a new circuit
                 init_circuit=time.time()
-                while not circuit and not attach_stream:
-                    circuit,attach_stream = create_circuit(controller)
-                circuit_finish_time=(time.time() - init_circuit)
+
+                circuit_id=""
+                while not circuit_id:
+                    try:
+                        circuit_id = controller.new_circuit(await_build = True)
+                    except stem.ControllerError as exc:
+                        circuit_fails+=1
+                        sys.stderr.write("Couldn't create a new circuit, retrying \n")
+                        print ("Number of circuit fails: ", circuit_fails)
+
+                def attach_stream(stream):
+                    if stream.status == 'NEW':
+                        controller.attach_stream(stream.id, circuit_id)
+
+                controller.add_event_listener(attach_stream, stem.control.EventType.STREAM)
+
+                circuit_finish_time=time.time() - init_circuit
                 print ("time to create circuit: ", circuit_finish_time)
 
                 #Do a query
+                controller.set_conf("__LeaveStreamsUnattached", "1")
                 query_start_time=time.time()
-                query_sucess = query(line,queries,line)
+                query_sucess = query(line)
+                if [query_sucess != "SUCCESS"]:
+                    query_fails+=1
+                    print ("Number of query fails: ", query_fails)
                 query_time=(time.time() - query_start_time)
 
-                #close circuit
-                if (circuit): controller.close_circuit(circuit)
-                if (attach_stream): controller.remove_event_listener(attach_stream)
+                #close circuit. Sometimes the circuits are already closed so do nothing if that happens
+                try:
+                    controller.close_circuit(circuit)
+                    controller.close_stream(stream.id)
+                    controller.remove_event_listener(attach_stream)
+                    controller.reset_conf('__LeaveStreamsUnattached')
+
+                except Exception as exc: pass
 
             total_query_time=(time.time() - init_query)
-            queries[line]["query_times"].append(query_time)
             queries[line]["circuit_creation_times"].append(circuit_finish_time)
+            queries[line]["circuit_fails"].append(circuit_fails)
+            queries[line]["query_times"].append(query_time)
+            queries[line]["query_fails"].append(query_fails)
             queries[line]["query_total_times"].append(total_query_time)
 
             print ("time to query: ", query_time)
             print ("total query time: ", total_query_time)
             print
+            controller.reset_conf('__LeaveStreamsUnattached')
 
-    controller.reset_conf('__LeaveStreamsUnattached')
     export_to_csv(queries,__location__)
 
 def main(argc, argv):
