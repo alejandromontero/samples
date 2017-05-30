@@ -20,7 +20,7 @@ from stem.version import Version
 
 TOR_PORT=9151
 SOCKS_PORT=9150
-CONNECTION_TIMEOUT=15
+CONNECTION_TIMEOUT=10
 QUERY_TIMEOUT=3600
 
 def export_to_csv(queries,__location__,test,type):
