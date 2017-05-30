@@ -25,12 +25,14 @@ QUERY_TIMEOUT=3600
 
 def export_to_csv(queries,__location__,test,type):
 
-    print (__location__ + "/" + test + "-" + type + "-test.csv")
+    path = __location__ + "/results"
+    if (not os.path.exists(path)):
+        os.makedirs(path)
 
-    csv_file = open(__location__ + "/" + test + "-" + type + "-test.csv" ,'wb')
+    csv_file = open(path + "/" + test + "-" + type + "-test.csv" ,'wb')
 
-    if (type=="TOR"): header = ["web-page", "circuit_average_creation_times", "query_average_times", "total_query_average_times","average_circuit_fails","average_query_fails"]
-    else: header = ["web-page", "query_average_times", "total_query_average_times","average_query_fails"]
+    if (type=="TOR"): header = ["web-page", "circuit_average_creation_times", "query_average_times", "total_query_average_times","average_circuit_fails","average_query_fails","bandwith"]
+    else: header = ["web-page", "query_average_times", "total_query_average_times","average_query_fails","bandwith"]
     writer = csv.DictWriter(csv_file,delimiter=',',fieldnames=header)
     writer.writeheader()
     for key,value in queries.iteritems():
@@ -40,20 +42,34 @@ def export_to_csv(queries,__location__,test,type):
         average_query_times=0
         average_query_fails=0
         total_query_average_times=0
+        average_bandwith=0
         for j in xrange(0, len(value["query_times"])):
             if (type=="TOR"): average_circuit_times += value["circuit_creation_times"][j]
             if (type=="TOR"): average_circuit_fails += value["circuit_fails"][j]
             average_query_times += value["query_times"][j]
             average_query_fails += value["query_fails"][j]
             total_query_average_times += value["query_total_times"][j]
+            average_bandwith += value["bandwith"][j]
 
-        row["web-page"]=key
-        if (type=="TOR"): row["circuit_average_creation_times"] = average_circuit_times/len(value["query_times"])
-        if (type=="TOR"): row["average_circuit_fails"] = average_circuit_fails/len(value["query_times"])
-        row["query_average_times"] = average_query_times/len(value["query_times"])
-        row["average_query_fails"] = average_query_fails/len(value["query_times"])
-        row["total_query_average_times"] = total_query_average_times/len(value["query_times"])
-        writer.writerow(row)
+            if (test == "bandwith"):
+                row["web-page"]=key
+                if (type=="TOR"): row["circuit_average_creation_times"] = value["circuit_creation_times"][j]
+                if (type=="TOR"): row["average_circuit_fails"] = value["circuit_fails"][j]
+                row["query_average_times"] = value["query_times"][j]
+                row["average_query_fails"] = value["query_fails"][j]
+                row["total_query_average_times"] = value["query_total_times"][j]
+                row["bandwith"] = value["bandwith"][j]
+                writer.writerow(row)
+
+        if (test == "latency"):
+            row["web-page"]=key
+            if (type=="TOR"): row["circuit_average_creation_times"] = average_circuit_times/len(value["query_times"])
+            if (type=="TOR"): row["average_circuit_fails"] = average_circuit_fails/len(value["query_times"])
+            row["query_average_times"] = average_query_times/len(value["query_times"])
+            row["average_query_fails"] = average_query_fails/len(value["query_times"])
+            row["total_query_average_times"] = total_query_average_times/len(value["query_times"])
+            row["bandwith"] = average_bandwith/len(value["query_times"])
+            writer.writerow(row)
 
 def query(url,type):
     """
@@ -90,13 +106,15 @@ def query(url,type):
     except pycurl.error as exc:
         sys.stderr.write ("Unable to perform query: ")
         print (exc)
-        return "FAIL"
+        return {"query_sucess":"FAIL","query_size":query.getinfo(pycurl.SIZE_DOWNLOAD)}
 
-    return "SUCCESS"
+    return {"query_sucess":"SUCCESS","query_size":query.getinfo(pycurl.SIZE_DOWNLOAD)}
 
 
 def make_experiments(controller,test,iterations,type):
 
+    print ("Starting experiment-",test,"of network: ",type)
+    print
     #Close all current TOR circuits (if any)
     print "stopping circuits"
     for circuit in controller.get_circuits():
@@ -110,7 +128,6 @@ def make_experiments(controller,test,iterations,type):
 
     # Configure tor client
     controller.set_conf("__DisablePredictedCircuits", "1")
-    controller.set_conf("MaxClientCircuitsPending", "1024")
 
     #Open file with URL to analyze
     __location__ = os.path.realpath(
@@ -133,6 +150,7 @@ def make_experiments(controller,test,iterations,type):
         queries[line]["query_times"]=[]
         queries[line]["query_fails"]=[]
         queries[line]["query_total_times"]=[]
+        queries[line]["bandwith"]=[]
 
         for i in xrange (0, int(iterations)):
             print ("Iteration ", i+1, "of web-page ", line)
@@ -167,12 +185,14 @@ def make_experiments(controller,test,iterations,type):
                 #Do a query
                 controller.set_conf("__LeaveStreamsUnattached", "1")
                 query_start_time=time.time()
-                query_sucess = query(line,"DEFAULT")
-                if [query_sucess != "SUCCESS"]:
+                query_res = query(line,type)
+                query_sucess = query_res["query_sucess"]
+                if (query_res["query_sucess"] != "SUCCESS"):
                     query_fails+=1
                     print ("Number of query fails: ", query_fails)
                 query_time=(time.time() - query_start_time)
 
+                bandwith=query_res["query_size"]/query_time #In bytes per second
                 #close circuit. Sometimes the circuits are already closed so do nothing if that happens
                 try:
                     controller.close_circuit(circuit)
@@ -188,6 +208,7 @@ def make_experiments(controller,test,iterations,type):
             queries[line]["query_times"].append(query_time)
             queries[line]["query_fails"].append(query_fails)
             queries[line]["query_total_times"].append(total_query_time)
+            queries[line]["bandwith"].append(bandwith)
 
             print ("time to query: ", query_time)
             print ("total query time: ", total_query_time)
@@ -195,6 +216,16 @@ def make_experiments(controller,test,iterations,type):
             controller.reset_conf('__LeaveStreamsUnattached')
 
     export_to_csv(queries,__location__,test,type)
+
+def connect_controller():
+    controller = connect_port(port=TOR_PORT)
+
+    if not controller:
+        sys.stderr.write("ERROR: Couldn't connect to tor. \n")
+        sys.exit(1)
+    else:
+        sys.stdout.write("Successfully connected to TOR. \n")
+    return controller
 
 def main(argc, argv):
     parser = argparse.ArgumentParser(description='Perform a TOR analysis')
@@ -204,18 +235,14 @@ def main(argc, argv):
 
     #connect to TOR
 
-    controller = connect_port(port=TOR_PORT)
-
-    if not controller:
-        sys.stderr.write("ERROR: Couldn't connect to tor. \n")
-        sys.exit(1)
-    else:
-        sys.stdout.write("Successfully connected to TOR. \n")
-
-    make_experiments(controller,"latency",args.iterations,"DEFAULT")
+    controller = connect_controller()
     make_experiments(controller,"latency",args.iterations,"TOR")
-    make_experiments(controller,"bandwith",args.iterations,"DEFAULT")
+    controller = connect_controller()
     make_experiments(controller,"bandwith",args.iterations,"TOR")
+    controller = connect_controller()
+    make_experiments(controller,"latency",args.iterations,"DEFAULT")
+    controller = connect_controller()
+    make_experiments(controller,"bandwith",args.iterations,"DEFAULT")
 
     controller.close()
     # os.kill(controller.get_pid(),signal.SIGTERM)
