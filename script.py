@@ -20,13 +20,17 @@ from stem.version import Version
 
 TOR_PORT=9151
 SOCKS_PORT=9150
-CONNECTION_TIMEOUT=30
+CONNECTION_TIMEOUT=15
+QUERY_TIMEOUT=3600
 
-def export_to_csv(queries,__location__):
+def export_to_csv(queries,__location__,test,type):
 
-    csv_file = open(__location__ + '/results_of_experiment.csv','wb')
+    print (__location__ + "/" + test + "-" + type + "-test.csv")
 
-    header = ["web-page", "circuit_average_creation_times", "query_average_times", "total_query_average_times","average_circuit_fails","average_query_fails"]
+    csv_file = open(__location__ + "/" + test + "-" + type + "-test.csv" ,'wb')
+
+    if (type=="TOR"): header = ["web-page", "circuit_average_creation_times", "query_average_times", "total_query_average_times","average_circuit_fails","average_query_fails"]
+    else: header = ["web-page", "query_average_times", "total_query_average_times","average_query_fails"]
     writer = csv.DictWriter(csv_file,delimiter=',',fieldnames=header)
     writer.writeheader()
     for key,value in queries.iteritems():
@@ -37,34 +41,49 @@ def export_to_csv(queries,__location__):
         average_query_fails=0
         total_query_average_times=0
         for j in xrange(0, len(value["query_times"])):
-            average_circuit_times += value["circuit_creation_times"][j]
-            average_circuit_fails += value["circuit_fails"][j]
+            if (type=="TOR"): average_circuit_times += value["circuit_creation_times"][j]
+            if (type=="TOR"): average_circuit_fails += value["circuit_fails"][j]
             average_query_times += value["query_times"][j]
             average_query_fails += value["query_fails"][j]
             total_query_average_times += value["query_total_times"][j]
 
         row["web-page"]=key
-        row["circuit_average_creation_times"] = average_circuit_times/len(value["query_times"])
-        row["average_circuit_fails"] = average_circuit_fails/len(value["query_times"])
+        if (type=="TOR"): row["circuit_average_creation_times"] = average_circuit_times/len(value["query_times"])
+        if (type=="TOR"): row["average_circuit_fails"] = average_circuit_fails/len(value["query_times"])
         row["query_average_times"] = average_query_times/len(value["query_times"])
         row["average_query_fails"] = average_query_fails/len(value["query_times"])
         row["total_query_average_times"] = total_query_average_times/len(value["query_times"])
         writer.writerow(row)
 
-def query(url):
+def query(url,type):
     """
     Uses pycurl to fetch a site using the proxy on the SOCKS_PORT.
     """
+    def devnull(body):
+        """ Drop Curl output. """
+        return
 
     output = StringIO.StringIO()
 
-    query = pycurl.Curl()
-    query.setopt(pycurl.URL, url)
-    query.setopt(pycurl.PROXY, 'localhost')
-    query.setopt(pycurl.PROXYPORT, SOCKS_PORT)
-    query.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
-    query.setopt(pycurl.CONNECTTIMEOUT, CONNECTION_TIMEOUT)
-    query.setopt(pycurl.WRITEFUNCTION, output.write)
+    if (type == "TOR"):
+
+        query = pycurl.Curl()
+        query.setopt(pycurl.URL, url)
+        query.setopt(pycurl.PROXY, 'localhost')
+        query.setopt(pycurl.PROXYPORT, SOCKS_PORT)
+        query.setopt(pycurl.PROXYTYPE, pycurl.PROXYTYPE_SOCKS5_HOSTNAME)
+        query.setopt(pycurl.CONNECTTIMEOUT, CONNECTION_TIMEOUT)
+        query.setopt(pycurl.TIMEOUT, QUERY_TIMEOUT)
+        query.setopt(pycurl.WRITEFUNCTION, devnull)
+        query.setopt(pycurl.USERAGENT, "")
+        query.setopt(pycurl.ENCODING, "identity")
+
+    else:
+        query = pycurl.Curl()
+        query.setopt(pycurl.URL, url)
+        query.setopt(pycurl.CONNECTTIMEOUT, CONNECTION_TIMEOUT)
+        query.setopt(pycurl.TIMEOUT, QUERY_TIMEOUT)
+        query.setopt(pycurl.WRITEFUNCTION, devnull)
 
     try:
         query.perform()
@@ -76,7 +95,7 @@ def query(url):
     return "SUCCESS"
 
 
-def make_experiments(controller,iterations):
+def make_experiments(controller,test,iterations,type):
 
     #Close all current TOR circuits (if any)
     print "stopping circuits"
@@ -97,7 +116,9 @@ def make_experiments(controller,iterations):
     __location__ = os.path.realpath(
         os.path.join(os.getcwd(), os.path.dirname(__file__)))
 
-    file = open(os.path.join(__location__,'sites.txt'),'r')
+    file="sites-"+test+".txt"
+    print (file)
+    file = open(os.path.join(__location__,file),'r')
 
     #Create data structures
     queries={}
@@ -120,31 +141,33 @@ def make_experiments(controller,iterations):
             query_fails=0
             init_query=time.time()
             while query_sucess != "SUCCESS":
-                #create a new circuit
-                init_circuit=time.time()
 
-                circuit_id=""
-                while not circuit_id:
-                    try:
-                        circuit_id = controller.new_circuit(await_build = True)
-                    except stem.ControllerError as exc:
-                        circuit_fails+=1
-                        sys.stderr.write("Couldn't create a new circuit, retrying \n")
-                        print ("Number of circuit fails: ", circuit_fails)
+                if (type=="TOR"):
+                    #create a new circuit
+                    init_circuit=time.time()
 
-                def attach_stream(stream):
-                    if stream.status == 'NEW':
-                        controller.attach_stream(stream.id, circuit_id)
+                    circuit_id=""
+                    while not circuit_id:
+                        try:
+                            circuit_id = controller.new_circuit(await_build = True)
+                        except stem.ControllerError as exc:
+                            circuit_fails+=1
+                            sys.stderr.write("Couldn't create a new circuit, retrying \n")
+                            print ("Number of circuit fails: ", circuit_fails)
 
-                controller.add_event_listener(attach_stream, stem.control.EventType.STREAM)
+                    def attach_stream(stream):
+                        if stream.status == 'NEW':
+                            controller.attach_stream(stream.id, circuit_id)
 
-                circuit_finish_time=time.time() - init_circuit
-                print ("time to create circuit: ", circuit_finish_time)
+                    controller.add_event_listener(attach_stream, stem.control.EventType.STREAM)
+
+                    circuit_finish_time=time.time() - init_circuit
+                    print ("time to create circuit: ", circuit_finish_time)
 
                 #Do a query
                 controller.set_conf("__LeaveStreamsUnattached", "1")
                 query_start_time=time.time()
-                query_sucess = query(line)
+                query_sucess = query(line,"DEFAULT")
                 if [query_sucess != "SUCCESS"]:
                     query_fails+=1
                     print ("Number of query fails: ", query_fails)
@@ -160,8 +183,8 @@ def make_experiments(controller,iterations):
                 except Exception as exc: pass
 
             total_query_time=(time.time() - init_query)
-            queries[line]["circuit_creation_times"].append(circuit_finish_time)
-            queries[line]["circuit_fails"].append(circuit_fails)
+            if (type=="TOR"): queries[line]["circuit_creation_times"].append(circuit_finish_time)
+            if (type=="TOR"): queries[line]["circuit_fails"].append(circuit_fails)
             queries[line]["query_times"].append(query_time)
             queries[line]["query_fails"].append(query_fails)
             queries[line]["query_total_times"].append(total_query_time)
@@ -171,7 +194,7 @@ def make_experiments(controller,iterations):
             print
             controller.reset_conf('__LeaveStreamsUnattached')
 
-    export_to_csv(queries,__location__)
+    export_to_csv(queries,__location__,test,type)
 
 def main(argc, argv):
     parser = argparse.ArgumentParser(description='Perform a TOR analysis')
@@ -189,7 +212,11 @@ def main(argc, argv):
     else:
         sys.stdout.write("Successfully connected to TOR. \n")
 
-    make_experiments(controller,args.iterations)
+    make_experiments(controller,"latency",args.iterations,"DEFAULT")
+    make_experiments(controller,"latency",args.iterations,"TOR")
+    make_experiments(controller,"bandwith",args.iterations,"DEFAULT")
+    make_experiments(controller,"bandwith",args.iterations,"TOR")
+
     controller.close()
     # os.kill(controller.get_pid(),signal.SIGTERM)
 
