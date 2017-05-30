@@ -29,7 +29,6 @@ def export_to_csv(queries,__location__):
     header = ["web-page", "circuit_average_creation_times", "query_average_times", "total_query_average_times","average_circuit_fails","average_query_fails"]
     writer = csv.DictWriter(csv_file,delimiter=',',fieldnames=header)
     writer.writeheader()
-    pprint.pprint(queries)
     for key,value in queries.iteritems():
         row={}
         average_circuit_times=0
