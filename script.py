@@ -1,6 +1,7 @@
 
 import sys,os,signal
 import argparse
+import random
 import re
 import time
 import datetime
@@ -160,6 +161,8 @@ def make_experiments(controller,test,iterations,type):
             init_query=time.time()
             while query_sucess != "SUCCESS":
 
+                controller.set_conf("__LeaveStreamsUnattached", "1")
+
                 if (type=="TOR"):
                     #create a new circuit
                     init_circuit=time.time()
@@ -175,7 +178,10 @@ def make_experiments(controller,test,iterations,type):
 
                     def attach_stream(stream):
                         if stream.status == 'NEW':
-                            controller.attach_stream(stream.id, circuit_id)
+                            try:
+                                controller.attach_stream(stream.id, circuit_id)
+                            except Exception as exc:
+                                print (exc)
 
                     controller.add_event_listener(attach_stream, stem.control.EventType.STREAM)
 
@@ -183,7 +189,6 @@ def make_experiments(controller,test,iterations,type):
                     print ("time to create circuit: ", circuit_finish_time)
 
                 #Do a query
-                controller.set_conf("__LeaveStreamsUnattached", "1")
                 query_start_time=time.time()
                 query_res = query(line,type)
                 query_sucess = query_res["query_sucess"]
@@ -215,7 +220,7 @@ def make_experiments(controller,test,iterations,type):
             print
             controller.reset_conf('__LeaveStreamsUnattached')
 
-    export_to_csv(queries,__location__,test,type)
+        export_to_csv(queries,__location__,test,type)
 
 def connect_controller():
     controller = connect_port(port=TOR_PORT)
@@ -235,8 +240,8 @@ def main(argc, argv):
 
     #connect to TOR
 
-    controller = connect_controller()
-    make_experiments(controller,"latency",args.iterations,"TOR")
+    # controller = connect_controller()
+    # make_experiments(controller,"latency",args.iterations,"TOR")
     controller = connect_controller()
     make_experiments(controller,"bandwith",args.iterations,"TOR")
     controller = connect_controller()

@@ -75,6 +75,7 @@ sleep 10
 echo -e "$GREEN Starting the experiments... now $NC \n"
 python $(pwd)/script.py $n_iter
 
+
 uninstall_dependencies
 
 
